@@ -14,11 +14,34 @@
   You should have received a copy of the GNU General Public License
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
   
-  Copyright 2016 Roberto Guido <bob@linux.it>
+  Copyright 2017 Roberto Guido <bob@linux.it>
 */
 
-function initCurl() {
-  $url = 'http://gttweb.5t.torino.it/gtt/it/trasporto/arrivi-ricerca.jsp';
+function random_string($length) {
+  $characters = '0123456789abcdefghijklmnopqrstuvwxyz';
+  $tot = strlen($characters);
+  $ret = '';
+
+  for ($i = 0; $i < $length; $i++)
+    $ret .= $characters[rand(0, $tot - 1)];
+
+  return $ret;
+}
+
+function initCurl($stop) {
+  /*
+    Non è chiaro se il primo parametro, la stringa randomica di 8 caratteri,
+    serva a qualcosa, ma nel dubbio meglio metterla...
+  */
+  $url = sprintf('http://www.5t.torino.it/5t/trasporto/arrival-times-byline.jsp?%s&action=getTransitsByLine&shortName=%s&routeCallback=lineBranchCtrl.getLineBranch&oreMinuti=%s%%3A%s&gma=%s%%2F%s%%2F%s',
+    random_string(8),
+    $stop,
+    date('H'),
+    date('i'),
+    date('d'),
+    date('m'),
+    date('y')
+  );
   $ch = curl_init();
 
   curl_setopt($ch, CURLOPT_URL, $url);
@@ -34,7 +57,7 @@ function parsePage($page) {
   $dom = new DOMDocument('1.0', 'UTF-8');
   $dom->loadHTML($page, LIBXML_NOERROR);
   $xpath = new DOMXpath($dom);
-  $rows = $xpath->query("//table[@class='generic_table']/tr");
+  $rows = $xpath->query("//table/tr");
   $data = [];
 
   foreach ($rows as $row) {
@@ -42,65 +65,30 @@ function parsePage($page) {
     if ($cells->length == 0)
       continue;
 
-    $r = (object)[
-      'line' => trim($cells->item(0)->getElementsByTagName('a')->item(0)->nodeValue),
-      'hour' => trim($cells->item(1)->nodeValue),
-      'realtime' => $cells->item(2)->nodeValue == 'previsione in tempo reale' ? 'true' : 'false',
-      'direction' => trim($cells->item(3)->nodeValue)
-    ];
-    
-    $data[] = $r;
+    $line = trim($cells->item(0)->getElementsByTagName('a')->item(0)->nodeValue);
+
+    for($i = 1; $i < $cells->length; $i++) {
+      $r = (object)[
+        'line' => $line,
+        'hour' => trim($cells->item($i)->nodeValue),
+        'realtime' => ($cells->item($i)->getElementsByTagName('i')->length != 0) ? 'true' : 'false',
+        'direction' => '???'
+      ];
+
+      $data[] = $r;
+    }
   }
   
   return $data;
 }
 
 function probeStop($stop) {
-  /*
-    La prima chiamata è per inizializzare/rinnovare il cookie, in funzione di
-    quello viene aperta una nuova sessione e, quando la successiva POST produrrà
-    un redirect, suddetto cookie sarà ispezionato per validare la richiesta
-  */
-
-  $ch = initCurl();
-  curl_exec($ch);
-  curl_close($ch);
-
-  /*
-    Giusto per sviare eventuali controlli sugli accessi...
-  */
-  sleep(2);
-
-  /*
-    Qui effettuo una POST come se stessi manualmente interrogando il form sul
-    sito
-  */
-  $fields = array(
-	  'shortName' => $stop,
-	  'ore' => date('G'),
-	  'minuti' => date('i'),
-	  'giorno' => date('d'),
-	  'mese' => date('m'),
-	  'anno' => date('Y'),
-	  urlencode('stoppingPointCtl:getTransits') => 'Invia'
-  );
-
-  $fields_string = '';
-  foreach($fields as $key=>$value)
-    $fields_string .= $key . '=' . $value . '&';
-  rtrim($fields_string, '&');
-
-  $ch = initCurl();
-  curl_setopt($ch,CURLOPT_POST, count($fields));
-  curl_setopt($ch,CURLOPT_POSTFIELDS, $fields_string);
-  curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/x-www-form-urlencoded'));
-
+  $ch = initCurl($stop);
   $result = curl_exec($ch);
   if ($result === false)
     return null;
 
   curl_close($ch);
-  
   return parsePage($result);
 }
 
