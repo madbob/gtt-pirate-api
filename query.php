@@ -70,9 +70,8 @@ function parsePage($page) {
     for($i = 1; $i < $cells->length; $i++) {
       $r = (object)[
         'line' => $line,
-        'hour' => trim($cells->item($i)->nodeValue),
+        'hour' => str_replace('*', '', trim($cells->item($i)->nodeValue)),
         'realtime' => ($cells->item($i)->getElementsByTagName('i')->length != 0) ? 'true' : 'false',
-        'direction' => '???'
       ];
 
       $data[] = $r;
@@ -94,7 +93,7 @@ function probeStop($stop) {
 
 function createDatabase($db_path) {
   $db = new PDO('sqlite:' . $db_path);
-  $db->query('CREATE TABLE stops (stop integer, line integer, hour varchar(10), realtime boolean, direction varchar(255), date datetime)');
+  $db->query('CREATE TABLE stops (stop integer, line integer, hour varchar(10), realtime boolean, date datetime)');
   return $db;
 }
 
@@ -118,7 +117,6 @@ function askStop($stop) {
       'line' => $r->line,
       'hour' => $r->hour,
       'realtime' => $r->realtime ? 'true' : 'false',
-      'direction' => $r->direction
     ];
   }
   
@@ -129,7 +127,7 @@ function askStop($stop) {
 
     $db->query(sprintf("DELETE FROM stops WHERE stop = %d", $stop));
     foreach($fetch as $f) {
-      $query = sprintf("INSERT INTO stops (stop, line, hour, realtime, direction, date) VALUES (%d, %d, '%s', %d, '%s', datetime('now'))", $stop, $f->line, $f->hour, $f->realtime ? 1 : 0, $f->direction);
+      $query = sprintf("INSERT INTO stops (stop, line, hour, realtime, date) VALUES (%d, %d, '%s', %d, datetime('now'))", $stop, $f->line, $f->hour, $f->realtime ? 1 : 0);
       $db->query($query);
     }
     
