@@ -6,6 +6,59 @@ from kivy.properties import StringProperty
 import requests
 import json
 from kivy.utils import get_color_from_hex
+from kivymd.uix.card import MDCard
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.label import Label
+kv=            '''
+#:import get_color_from_hex kivy.utils.get_color_from_hex
+
+
+
+MDScreen:
+
+    MDBottomNavigation:
+        panel_color: get_color_from_hex("#eeeaea")
+        selected_color_background: get_color_from_hex("#97ecf8")
+        text_color_active: 0, 0, 0, 1
+
+        MDBottomNavigationItem:
+            name: 'screen 1'
+            text: 'Orari'
+            icon: 'train'
+            badge_icon: "numeric-10"
+            GridLayout:
+                # this layout is populated with Button widgets in app code
+                id: entries_box
+                cols: 1
+                rows: 20
+            
+                Button:
+                    text: "Create Widgets"
+                    on_release: app.create_widgets()
+
+                Label:
+                    text: "Create Widgetstestedrrrrr"
+                    color: 0,0,0,0
+
+        MDBottomNavigationItem:
+            name: 'screen 2'
+            text: 'Notizie'
+            icon: 'newspaper'
+            badge_icon: "numeric-5"
+
+            MDLabel:
+                text: 'Discord'
+                halign: 'center'
+
+        MDBottomNavigationItem:
+            name: 'screen 3'
+            text: 'Impostazioni'
+            icon: 'cog-outline'
+
+            MDLabel:
+                text: 'LinkedIN'
+                halign: 'center'
+'''
 print("Prova delle API della GTT")
 
 print("Inserisci il numero della fermata:")
@@ -30,62 +83,19 @@ class Test(MDApp):
         for n in range(len(json_data)):
             # create a button for each data entry, specifying the text and id
             # (although text and id are the same in this case, you should see how this works)
-            temp_button = Button(text=json_data[n]['line'],
+            temp_button = Button(text="Linea " + json_data[n]['line'] + "                                           Ora: " + json_data[n]['hour'],
+                                 halign="left",
                                  color=(98, 0, 238, 1),
-                                 background_color=get_color_from_hex("#6200EE"),
-                                 border=(8,8,8,8),
-                                 size=[500,500])
+                                 background_color=get_color_from_hex("#FFD8E4"),
+                                 background_normal= 'normal.png',
+                                 border=(0,20,0,20))
             # add the button to the "entries_box" layout widget
             self.root.ids.entries_box.add_widget(temp_button)
     def build(self):
         self.theme_cls.material_style = "M3"
-        return Builder.load_string(
-            '''
-#:import get_color_from_hex kivy.utils.get_color_from_hex
+        self.root = Builder.load_string(kv)
+        return self.root
 
-
-MDScreen:
-
-    MDBottomNavigation:
-        panel_color: get_color_from_hex("#eeeaea")
-        selected_color_background: get_color_from_hex("#97ecf8")
-        text_color_active: 0, 0, 0, 1
-
-        MDBottomNavigationItem:
-            name: 'screen 1'
-            text: 'Mail'
-            icon: 'gmail'
-            badge_icon: "numeric-10"
-            BoxLayout:
-                orientation: 'vertical'
-                # this layout is populated with Button widgets in app code
-                id: entries_box
-
-            
-                Button:
-                    text: "Create Widgets"
-                    on_release: app.create_widgets()
-
-        MDBottomNavigationItem:
-            name: 'screen 2'
-            text: 'Discord'
-            icon: 'discord'
-            badge_icon: "numeric-5"
-
-            MDLabel:
-                text: 'Discord'
-                halign: 'center'
-
-        MDBottomNavigationItem:
-            name: 'screen 3'
-            text: 'LinkedIN'
-            icon: 'linkedin'
-
-            MDLabel:
-                text: 'LinkedIN'
-                halign: 'center'
-'''
-        )
-
+        
 
 Test().run()
