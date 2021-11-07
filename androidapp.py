@@ -17,9 +17,10 @@ class content(Screen):
     pass
 kv=            '''
 #:import get_color_from_hex kivy.utils.get_color_from_hex
+#: import ScreenManager kivy.uix.screenmanager.ScreenManager
+#: import Screen kivy.uix.screenmanager.ScreenManager
+
 <content>
-    name: "content"
-    id: content
     orientation: "vertical"
     spacing: "12dp"
     size_hint_y: None
@@ -47,6 +48,7 @@ MDScreen:
                 id: entries_box
                 cols: 1
                 rows: 20
+
                     
             MDFloatingActionButton:
                 icon: "magnify"
@@ -103,9 +105,8 @@ class Test(MDApp):
 
 
     def create_widgets(self):
-        print("Prova delle API della GTT")
 
-        fermata =  self.root.ids.entries_box.ids.name.text
+        fermata =  self.dialog.content_cls.ids.name.text
 
 
         response = requests.get('http://gpa.madbob.org/query.php?stop=' + fermata)
