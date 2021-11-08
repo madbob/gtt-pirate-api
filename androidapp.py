@@ -79,7 +79,7 @@ class Test(MDApp):
     def __init__(self, **kwargs):
         """Construct main app."""
         super().__init__(**kwargs)
-        self.name_to_phone = {"Bob Brown": "0414144411", "Cat Cyan": "0441411211", "Oren Ochre": "0432123456"}
+
 
     def clear_all(self):
         """Clear all of the widgets that are children of the "entries_box" layout widget."""
