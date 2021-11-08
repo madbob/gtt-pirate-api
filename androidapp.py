@@ -24,13 +24,11 @@ kv=            '''
     orientation: "vertical"
     spacing: "12dp"
     size_hint_y: None
-    height: "120dp"
-    GridLayout:
-        name: "content"
-        id: content
-        MDTextField:
-            id:name
-            hint_text: "Numero della fermata"
+    height: "50dp"
+
+    MDTextField:
+        id:name
+        hint_text: "Numero della fermata"
     
 
 MDScreen:
@@ -54,7 +52,7 @@ MDScreen:
                 icon: "magnify"
                 type: "type_button"
                 on_release: app.show_alert_dialog()
-                pos_hint:{"center_x":.9,"y":0.07}
+                pos_hint:{"center_x":.85,"y":0.07}
 
         MDBottomNavigationItem:
             name: 'screen 2'
@@ -83,7 +81,10 @@ class Test(MDApp):
         super().__init__(**kwargs)
         self.name_to_phone = {"Bob Brown": "0414144411", "Cat Cyan": "0441411211", "Oren Ochre": "0432123456"}
 
-    
+    def clear_all(self):
+        """Clear all of the widgets that are children of the "entries_box" layout widget."""
+        self.root.ids.entries_box.clear_widgets()
+
     def show_alert_dialog(self):
         if not self.dialog:
             self.dialog = MDDialog(
@@ -105,7 +106,7 @@ class Test(MDApp):
 
 
     def create_widgets(self):
-
+        self.root.ids.entries_box.clear_widgets()
         fermata =  self.dialog.content_cls.ids.name.text
 
 
