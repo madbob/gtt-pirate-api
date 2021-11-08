@@ -37,6 +37,12 @@ kv=            '''
             text: root.text
             adaptive_size: True
             color: .2, .2, .2, .8
+            Image:
+                source: 'bus.png'
+                height: dp(20)
+                weight: dp(20)
+                allow_stretch: 'true'
+                pos: (100,0)
 
 <content>
     orientation: "vertical"
