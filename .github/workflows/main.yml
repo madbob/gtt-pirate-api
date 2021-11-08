@@ -15,11 +15,12 @@ jobs:
         uses: ArtemSBulgakov/buildozer-action@v1
         id: buildozer
         with:
+          command: buildozer android debug
           workdir: .
           buildozer_version: stable
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
-          name: package
+          name: gtt
           path: ${{ steps.buildozer.outputs.filename }}
