@@ -24,7 +24,7 @@ kv=            '''
     orientation: "vertical"
     spacing: "12dp"
     size_hint_y: None
-    height: "50dp"
+    height: "120dp"
     GridLayout:
         name: "content"
         id: content
