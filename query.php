@@ -55,33 +55,49 @@ class GPA {
         return json_decode($result);
     }
 
+    private function actualStopID($stop) {
+        $id = null;
+        $now = Carbon::now();
+
+        $query = sprintf("SELECT identifier FROM stop_ids WHERE stop = %d AND date > '%s'", $stop, $now->copy()->subMinutes(30)->format('Y-m-d H:i:s'));
+        $res = $this->db->query($query);
+
+        while ($row = $res->fetch()) {
+            $id = $row['identifier'];
+            break;
+        }
+
+        if (is_null($id)) {
+            /*
+                Per interrogare l'endpoint effettivo con i passaggi, ho bisogno dell'ID
+                che identifica la fermata. Codificato con un hash di natura non meglio
+                identificata, e probabilmente mutevole nel tempo, dunque lo pesco in
+                modo esplicito con una chiamata ad-hoc
+            */
+            $request = '{
+                "id": "q01",
+                "query": "query StopRoutes($id_0:String!,$startTime_1:Long!,$timeRange_2:Int!,$numberOfDepartures_3:Int!) {stop(id:$id_0) {id,...F2}} fragment F0 on Alert {id,alertDescriptionText,alertHash,alertHeaderText,alertSeverityLevel,alertUrl,effectiveEndDate,effectiveStartDate,alertDescriptionTextTranslations {language,text},alertHeaderTextTranslations {language,text},alertUrlTranslations {language,text}} fragment F1 on Route {alerts {trip {pattern {code,id},id},id,...F0},id} fragment F2 on Stop {_stoptimesWithoutPatterns4nTcNn:stoptimesWithoutPatterns(startTime:$startTime_1,timeRange:$timeRange_2,numberOfDepartures:$numberOfDepartures_3,omitCanceled:false) {realtimeState,trip {pattern {code,id},route {gtfsId,shortName,longName,mode,color,id,...F1},id}},id}",
+                "variables": {
+                    "id_0": "gtt:' . $stop . '",
+                    "startTime_1": ' . time() . ',
+                    "timeRange_2": 900,
+                    "numberOfDepartures_3": 100
+                }
+            }';
+
+            $result = $this->doCurl($request);
+            $id = $result->data->stop->id;
+
+            $this->db->query(sprintf("DELETE FROM stop_ids WHERE stop = %d", $stop));
+            $query = sprintf("INSERT INTO stop_ids (stop, identifier, date) VALUES (%d, '%s', '%s')", $stop, $id, $now->format('Y-m-d H:i:s'));
+            $this->db->query($query);
+        }
+
+        return $id;
+    }
+
     private function probeStop($stop) {
-        /*
-            Per interrogare l'endpoint effettivo con i passaggi, ho bisogno dell'ID
-            che identifica la fermata. Codificato con un hash di natura non meglio
-            identificata, e probabilmente mutevole nel tempo, dunque lo pesco in
-            modo esplicito con una chiamata ad-hoc
-        */
-        $request = '{
-            "id": "q01",
-            "query": "query StopRoutes($id_0:String!,$startTime_1:Long!,$timeRange_2:Int!,$numberOfDepartures_3:Int!) {stop(id:$id_0) {id,...F2}} fragment F0 on Alert {id,alertDescriptionText,alertHash,alertHeaderText,alertSeverityLevel,alertUrl,effectiveEndDate,effectiveStartDate,alertDescriptionTextTranslations {language,text},alertHeaderTextTranslations {language,text},alertUrlTranslations {language,text}} fragment F1 on Route {alerts {trip {pattern {code,id},id},id,...F0},id} fragment F2 on Stop {_stoptimesWithoutPatterns4nTcNn:stoptimesWithoutPatterns(startTime:$startTime_1,timeRange:$timeRange_2,numberOfDepartures:$numberOfDepartures_3,omitCanceled:false) {realtimeState,trip {pattern {code,id},route {gtfsId,shortName,longName,mode,color,id,...F1},id}},id}",
-            "variables": {
-                "id_0": "gtt:' . $stop . '",
-                "startTime_1": ' . time() . ',
-                "timeRange_2": 900,
-                "numberOfDepartures_3": 100
-            }
-        }';
-
-        $result = $this->doCurl($request);
-        $id = $result->data->stop->id;
-
-        /*
-            TODO: qui salvo temporaneamente gli ID delle fermate per vedere
-            quanto sono cachabili nel tempo
-        */
-        $query = sprintf("INSERT INTO stop_ids (stop, identifier, date) VALUES (%d, '%s', datetime('now'))", $stop, $id);
-        $this->db->query($query);
+        $id = $this->actualStopID($stop);
 
         /*
             Pesco i dati per la prossima ora
