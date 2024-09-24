@@ -20,132 +20,135 @@
 require 'vendor/autoload.php';
 use Carbon\Carbon;
 
-function doCurl($body) {
-    $url = 'https://plan.muoversiatorino.it/otp/routers/mato/index/graphql';
+class GPA {
+    private $db;
 
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-    curl_setopt($ch, CURLOPT_POST, 1);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-    $result = curl_exec($ch);
-    return json_decode($result);
-}
-
-function probeStop($stop) {
-    /*
-        Per interrogare l'endpoint effettivo con i passaggi, ho bisogno dell'ID
-        che identifica la fermata. Codificato con un hash di natura non meglio
-        identificata, e probabilmente mutevole nel tempo, dunque lo pesco in
-        modo esplicito con una chiamata ad-hoc
-    */
-    $request = '{
-    	"id": "q01",
-    	"query": "query StopRoutes($id_0:String!,$startTime_1:Long!,$timeRange_2:Int!,$numberOfDepartures_3:Int!) {stop(id:$id_0) {id,...F2}} fragment F0 on Alert {id,alertDescriptionText,alertHash,alertHeaderText,alertSeverityLevel,alertUrl,effectiveEndDate,effectiveStartDate,alertDescriptionTextTranslations {language,text},alertHeaderTextTranslations {language,text},alertUrlTranslations {language,text}} fragment F1 on Route {alerts {trip {pattern {code,id},id},id,...F0},id} fragment F2 on Stop {_stoptimesWithoutPatterns4nTcNn:stoptimesWithoutPatterns(startTime:$startTime_1,timeRange:$timeRange_2,numberOfDepartures:$numberOfDepartures_3,omitCanceled:false) {realtimeState,trip {pattern {code,id},route {gtfsId,shortName,longName,mode,color,id,...F1},id}},id}",
-    	"variables": {
-    		"id_0": "gtt:' . $stop . '",
-    		"startTime_1": ' . time() . ',
-    		"timeRange_2": 900,
-    		"numberOfDepartures_3": 100
-    	}
-    }';
-
-    $result = doCurl($request);
-    $id = $result->data->stop->id;
-
-    /*
-        Pesco i dati per le prossime 2 ore
-    */
-    $offset = 60 * 60 * 2;
-
-    /*
-        Qui interrogo l'endpoint reale, passando l'ID della fermata
-        precedentemente individuato
-    */
-    $request = '{
-    	"id": "q02",
-    	"query": "query StopPageContentContainer_StopRelayQL($id_0:ID!,$startTime_1:Long!,$timeRange_2:Int!,$numberOfDepartures_3:Int!) {node(id:$id_0) {...F2}} fragment F0 on Route {alerts {alertSeverityLevel,effectiveEndDate,effectiveStartDate,trip {pattern {code,id},id},id},id} fragment F1 on Stoptime {realtimeState,realtimeDeparture,scheduledDeparture,realtimeArrival,scheduledArrival,realtime,trip {pattern {route {shortName,id,...F0},id},id}} fragment F2 on Stop {_stoptimesWithoutPatterns1WnWVl:stoptimesWithoutPatterns(startTime:$startTime_1,timeRange:$timeRange_2,numberOfDepartures:$numberOfDepartures_3,omitCanceled:false) {...F1},id}",
-    	"variables": {
-    		"id_0": "' . $id . '",
-    		"startTime_1": "' . time() . '",
-    		"timeRange_2": ' . $offset . ',
-    		"numberOfDepartures_3": 100
-    	}
-    }';
-
-    $result = doCurl($request);
-    $ret = [];
-
-    foreach($result->data->node as $prop => $data) {
-    	if (str_starts_with($prop, '_stoptimes')) {
-    		foreach($data as $row) {
-                $ret[] = (object) [
-                    'line' => $row->trip->pattern->route->shortName,
-                    'hour' => Carbon::today()->addSeconds($row->realtimeDeparture)->setTimezone('Europe/Rome')->format('H:i:s'),
-                    'realtime' => ($row->realtimeState == 'UPDATED'),
-                ];
-    		}
-    	}
-    }
-
-    return $ret;
-}
-
-function createDatabase($db_path) {
-    $db = new PDO('sqlite:' . $db_path);
-    $db->query('CREATE TABLE stops (stop integer, line integer, hour varchar(10), realtime boolean, date datetime)');
-    return $db;
-}
-
-function askStop($stop) {
-    $db_path = 'gtt.db';
-
-    if (file_exists($db_path) == false) {
-        $db = createDatabase($db_path);
-    }
-    else {
+    private function createDatabase($db_path) {
         $db = new PDO('sqlite:' . $db_path);
+        $db->query('CREATE TABLE stop_ids (stop integer, identifier varchar(30), date datetime)');
+        $db->query('CREATE TABLE stops (stop integer, line integer, hour varchar(10), realtime boolean, date datetime)');
+        return $db;
     }
 
-    /*
-        Cerco i risultati degli ultimi 5 minuti
-    */
-    $query = sprintf("SELECT * FROM stops WHERE stop = %d AND strftime('%%s', 'now') - strftime('%%s', date) < 300", $stop);
-    $data = $db->query($query);
-    $ret = [];
+    public function __construct() {
+        $db_path = 'gtt.db';
 
-    while($r = $data->fetchObject()) {
-        $ret[] = (object) [
-            'line' => $r->line,
-            'hour' => $r->hour,
-            'realtime' => $r->realtime ? 'true' : 'false',
-        ];
+        if (file_exists($db_path) == false) {
+            $this->db = $this->createDatabase($db_path);
+        }
+        else {
+            $this->db = new PDO('sqlite:' . $db_path);
+        }
     }
 
-    if (empty($ret)) {
-        $fetch = probeStop($stop);
+    private function doCurl($body) {
+        $url = 'https://plan.muoversiatorino.it/otp/routers/mato/index/graphql';
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+        curl_setopt($ch, CURLOPT_POST, 1);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+        $result = curl_exec($ch);
+        curl_close($ch);
+        return json_decode($result);
+    }
+
+    private function probeStop($stop) {
+        /*
+            Per interrogare l'endpoint effettivo con i passaggi, ho bisogno dell'ID
+            che identifica la fermata. Codificato con un hash di natura non meglio
+            identificata, e probabilmente mutevole nel tempo, dunque lo pesco in
+            modo esplicito con una chiamata ad-hoc
+        */
+        $request = '{
+            "id": "q01",
+            "query": "query StopRoutes($id_0:String!,$startTime_1:Long!,$timeRange_2:Int!,$numberOfDepartures_3:Int!) {stop(id:$id_0) {id,...F2}} fragment F0 on Alert {id,alertDescriptionText,alertHash,alertHeaderText,alertSeverityLevel,alertUrl,effectiveEndDate,effectiveStartDate,alertDescriptionTextTranslations {language,text},alertHeaderTextTranslations {language,text},alertUrlTranslations {language,text}} fragment F1 on Route {alerts {trip {pattern {code,id},id},id,...F0},id} fragment F2 on Stop {_stoptimesWithoutPatterns4nTcNn:stoptimesWithoutPatterns(startTime:$startTime_1,timeRange:$timeRange_2,numberOfDepartures:$numberOfDepartures_3,omitCanceled:false) {realtimeState,trip {pattern {code,id},route {gtfsId,shortName,longName,mode,color,id,...F1},id}},id}",
+            "variables": {
+                "id_0": "gtt:' . $stop . '",
+                "startTime_1": ' . time() . ',
+                "timeRange_2": 900,
+                "numberOfDepartures_3": 100
+            }
+        }';
+
+        $result = $this->doCurl($request);
+        $id = $result->data->stop->id;
+
+        /*
+            TODO: qui salvo temporaneamente gli ID delle fermate per vedere
+            quanto sono cachabili nel tempo
+        */
+        $query = sprintf("INSERT INTO stop_ids (stop, identifier, date) VALUES (%d, '%s', datetime('now'))", $stop, $id);
+        $this->db->query($query);
+
+        /*
+            Pesco i dati per la prossima ora
+        */
+        $offset = 60 * 60;
+
+        /*
+            Qui interrogo l'endpoint reale, passando l'ID della fermata
+            precedentemente individuato
+        */
+        $request = '{
+            "id": "q02",
+            "query": "query StopPageContentContainer_StopRelayQL($id_0:ID!,$startTime_1:Long!,$timeRange_2:Int!,$numberOfDepartures_3:Int!) {node(id:$id_0) {...F2}} fragment F0 on Route {alerts {alertSeverityLevel,effectiveEndDate,effectiveStartDate,trip {pattern {code,id},id},id},id} fragment F1 on Stoptime {realtimeState,realtimeDeparture,scheduledDeparture,realtimeArrival,scheduledArrival,realtime,trip {pattern {route {shortName,id,...F0},id},id}} fragment F2 on Stop {_stoptimesWithoutPatterns1WnWVl:stoptimesWithoutPatterns(startTime:$startTime_1,timeRange:$timeRange_2,numberOfDepartures:$numberOfDepartures_3,omitCanceled:false) {...F1},id}",
+            "variables": {
+                "id_0": "' . $id . '",
+                "startTime_1": "' . time() . '",
+                "timeRange_2": ' . $offset . ',
+                "numberOfDepartures_3": 100
+            }
+        }';
+
+        $result = $this->doCurl($request);
+        $ret = [];
+
+        foreach($result->data->node as $prop => $data) {
+            if (str_starts_with($prop, '_stoptimes')) {
+                foreach($data as $row) {
+                    $ret[] = (object) [
+                        'line' => $row->trip->pattern->route->shortName,
+                        /*
+                            L'orario di arrivo è espresso in numero di secondi a
+                            partire dall'inizio della giornata.
+                            Una sorta di Unix time minimale...
+                        */
+                        'hour' => Carbon::today()->addSeconds($row->realtimeDeparture)->setTimezone('Europe/Rome')->format('H:i:s'),
+                        'realtime' => ($row->realtimeState == 'UPDATED'),
+                    ];
+                }
+            }
+        }
+
+        return $ret;
+    }
+
+    public function askStop($stop) {
+        $fetch = $this->probeStop($stop);
         if ($fetch == null) {
             return [];
         }
 
-        $db->query(sprintf("DELETE FROM stops WHERE stop = %d", $stop));
+        $this->db->query(sprintf("DELETE FROM stops WHERE stop = %d", $stop));
         foreach($fetch as $f) {
             $query = sprintf("INSERT INTO stops (stop, line, hour, realtime, date) VALUES (%d, %d, '%s', %d, datetime('now'))", $stop, $f->line, $f->hour, $f->realtime ? 1 : 0);
-            $db->query($query);
+            $this->db->query($query);
         }
 
         $ret = $fetch;
+        return $ret;
     }
-
-    return $ret;
 }
 
+$gpa = new GPA();
 header('Content-Type: application/json');
 
 $stop = $_GET['stop'];
 if (is_numeric($stop)) {
-    echo json_encode(askStop($stop));
+    echo json_encode($gpa->askStop($stop));
 }
 else {
     echo "[]";
